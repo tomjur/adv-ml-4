@@ -9,7 +9,7 @@ if __name__ == '__main__':
 
     hidden1 = np.random.choice([10, 12, 15, 18, 20])
     hidden2 = np.random.choice([10, 12, 15, 18, 20])
-    starting_learning_rate = np.power(10.0, np.random.choice([-2, -3, -4, -5, 20]))
+    starting_learning_rate = np.power(10.0, np.random.choice([-2, -3, -4, -5]))
     learning_rate_decay_steps = np.random.choice([5, 10, 20, 100])
     learning_rate_weight_decrease = np.random.choice([0.96, 0.98, 0.99, 1.0])
     episodes_per_update = np.random.choice([3, 5, 10, 20, 100])

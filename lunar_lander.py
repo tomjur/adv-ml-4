@@ -143,6 +143,11 @@ def get_grads_for_episode(env, sess, agent, rewards_discount_factor):
         reward_per_step[i] = next
     # reward_per_step = np.cumsum(reward_per_step)
     reward_per_step = reward_per_step[::-1]
+    # normalize rewards
+    reward_per_step -= reward_per_step.mean()
+    rewards_std = reward_per_step.std()
+    if rewards_std > 0.0:
+        reward_per_step /= rewards_std
 
     # # get the sum of rewards
     # sum_rewards = np.sum(reward_per_step)
