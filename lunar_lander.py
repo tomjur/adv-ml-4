@@ -28,23 +28,15 @@ class Agent():
         w1 = tf.get_variable("w1", shape=[input_space_size, hidden1],
                              initializer=tf.contrib.layers.xavier_initializer())
         b1 = tf.get_variable("b1", shape=[hidden1], initializer=tf.zeros_initializer())
-        h1 = tf.tan(tf.matmul(observation_reshaped, w1) + b1)
+        h1 = tf.tanh(tf.matmul(observation_reshaped, w1) + b1)
         w2 = tf.get_variable("w2", shape=[hidden1, hidden2],
                              initializer=tf.contrib.layers.xavier_initializer())
         b2 = tf.get_variable("b2", shape=[hidden2], initializer=tf.zeros_initializer())
-        h2 = tf.tan(tf.matmul(h1, w2) + b2)
+        h2 = tf.tanh(tf.matmul(h1, w2) + b2)
         w3 = tf.get_variable("w3", shape=[hidden2, action_space_size],
                              initializer=tf.contrib.layers.xavier_initializer())
         b3 = tf.get_variable("b3", shape=[action_space_size], initializer=tf.zeros_initializer())
 
-        # w1 = tf.Variable(tf.random_normal([input_space_size, hidden1], dtype=tf.float32))
-        # b1 = tf.Variable(tf.random_normal([hidden1], dtype=tf.float32))
-        # h1 = tf.tan(tf.matmul(observation_reshaped, w1) + b1)
-        # w2 = tf.Variable(tf.random_normal([hidden1, hidden2], dtype=tf.float32))
-        # b2 = tf.Variable(tf.random_normal([hidden2], dtype=tf.float32))
-        # h2 = tf.tan(tf.matmul(h1, w2) + b2)
-        # w3 = tf.Variable(tf.random_normal([hidden2, action_space_size], dtype=tf.float32))
-        # b3 = tf.Variable(tf.random_normal([action_space_size], dtype=tf.float32))
         self.trainable_params = [w1, b1, w2, b2, w3, b3]
         self.softmax_step = tf.reshape(tf.nn.softmax(tf.matmul(h2, w3) + b3), (action_space_size,))
 
@@ -53,14 +45,7 @@ class Agent():
         # get the log of the gradients of that action with respect to the parameters
         selected_action_softmax = self.softmax_step[self.selected_action_placeholder]
         # since we are maximizing need to negate
-        # log_selected_action_softmax = tf.log(selected_action_softmax)
         log_selected_action_softmax = -1.0 * tf.log(selected_action_softmax)
-        adam = tf.train.AdamOptimizer(learning_rate=tf_learn_rate)
-        # gradients_for_action = adam.compute_gradients(loss=log_selected_action_softmax,
-        #                                                    var_list=self.trainable_params)
-        # assert_w = tf.assert_equal(self.trainable_params[0], gradients_for_action[0][1])
-        # with tf.control_dependencies([assert_w]):
-        #     self.gradients_for_action = gradients_for_action
         self.gradients_for_action = tf.gradients(ys=log_selected_action_softmax, xs=self.trainable_params)
 
         # placeholder for the gradients with the total reward
@@ -89,7 +74,8 @@ class Agent():
             (self.b3_gradients_placeholder, b3),
         ]
 
-        self.train_step = adam.apply_gradients(prepare_inputs_for_optimization, global_step=self.global_step)
+        self.train_step = tf.train.AdamOptimizer(learning_rate=tf_learn_rate)\
+            .apply_gradients(prepare_inputs_for_optimization, global_step=self.global_step)
 
 
 def multiply_gradients_by_scalar(grads, scalar):
@@ -126,13 +112,14 @@ def get_grads_for_episode(env, sess, agent, rewards_discount_factor):
         new_grads = sess.run(agent.gradients_for_action,
                              feed_dict={agent.observation: obsrv,
                                         agent.selected_action_placeholder: action})
-        # remove the second part (this is the variable)
-        # new_grads = [g[0] for g in new_grads]
 
         # sum the gradients
         grads_per_step.append(new_grads)
         # update the state
         obsrv = new_obsrv
+
+    # get the sum of rewards
+    sum_rewards = np.sum(reward_per_step)
 
     # calculate the reward of the tail
     reward_per_step = np.array(reward_per_step)
@@ -141,7 +128,6 @@ def get_grads_for_episode(env, sess, agent, rewards_discount_factor):
     for i in range(len(reward_per_step)):
         next = reward_per_step[i] + rewards_discount_factor * next
         reward_per_step[i] = next
-    # reward_per_step = np.cumsum(reward_per_step)
     reward_per_step = reward_per_step[::-1]
     # normalize rewards
     reward_per_step -= reward_per_step.mean()
@@ -149,26 +135,14 @@ def get_grads_for_episode(env, sess, agent, rewards_discount_factor):
     if rewards_std > 0.0:
         reward_per_step /= rewards_std
 
-    # # get the sum of rewards
-    # sum_rewards = np.sum(reward_per_step)
-
     # multiply the gradients with the cumulative reward
     grads_for_episode = None
     for t in range(len(grads_per_step)):
         grads_in_t = grads_per_step[t]
         grads_in_t = multiply_gradients_by_scalar(grads_in_t, reward_per_step[t])
         grads_for_episode = accumulate_gradients(grads_for_episode, grads_in_t)
-    return grads_for_episode, reward_per_step[0]
-
-    # # multiply the gradients with the cumulative reward
-    # grads_for_episode = None
-    # for t in range(len(grads_per_step)):
-    #     grads_for_episode = accumulate_gradients(grads_for_episode, grads_per_step[t])
-    # grads_for_episode = multiply_gradients_by_scalar(grads_for_episode, sum_rewards)
-
     # return grads_for_episode, reward_per_step[0]
-    # return grads_for_episode, sum_rewards
-
+    return grads_for_episode, sum_rewards
 
 def run_episode(sess, env, agent, render=False):
     done = False
@@ -243,11 +217,13 @@ def run_for_parameter_set(hidden1, hidden2,
             print 'iteration done, global_step {}, time {}, avg rewards {}'.format(s, elapsed, avg_rewards)
 
             # show movie if needed
-            if avg_rewards > 50 and one_movie_per_updates != -1 and (update_iteration + 1) % one_movie_per_updates == 0:
+            if print_summary_identification is None and avg_rewards > 150 \
+                    and one_movie_per_updates != -1 and (update_iteration + 1) % one_movie_per_updates == 0:
                 do_movie(sess, env, agent)
 
-        # do final movie
-        do_movie(sess, env, agent)
+        # do final movie - if not summary
+        if print_summary_identification is None:
+            do_movie(sess, env, agent)
 
         # save parameters:
         params_to_save = sess.run(agent.trainable_params)
@@ -282,7 +258,7 @@ def main(argv):
     hidden1 = 15
     hidden2 = 15
 
-    starting_learning_rate = 0.01
+    starting_learning_rate = 0.001
     learning_rate_decay_steps = 10
     learning_rate_weight_decrease = 1.0
 
@@ -292,16 +268,13 @@ def main(argv):
     total_episodes = 30000
     # total_episodes = 5
 
-    rewards_discount_factor = 0.95
+    rewards_discount_factor = 0.99
 
     one_movie_per_updates = 10  # if set to -1 only show at end
     run_for_parameter_set(hidden1, hidden2,
                           starting_learning_rate, learning_rate_decay_steps, learning_rate_weight_decrease,
                           total_episodes, episodes_per_update, rewards_discount_factor,
                           one_movie_per_updates)
-
-
-
 
 
 if __name__ == '__main__':
