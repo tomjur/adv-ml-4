@@ -30,13 +30,13 @@ class Agent:
 
         # network
         self.w1 = tf.get_variable("w1", shape=[self.input_space_size, hidden1],
-                             initializer=tf.contrib.layers.xavier_initializer())
+                                  initializer=tf.contrib.layers.xavier_initializer())
         self.b1 = tf.get_variable("b1", shape=[hidden1], initializer=tf.zeros_initializer())
         self.w2 = tf.get_variable("w2", shape=[hidden1, hidden2],
-                             initializer=tf.contrib.layers.xavier_initializer())
+                                  initializer=tf.contrib.layers.xavier_initializer())
         self.b2 = tf.get_variable("b2", shape=[hidden2], initializer=tf.zeros_initializer())
         self.w3 = tf.get_variable("w3", shape=[hidden2, self.action_space_size],
-                             initializer=tf.contrib.layers.xavier_initializer())
+                                  initializer=tf.contrib.layers.xavier_initializer())
         self.b3 = tf.get_variable("b3", shape=[self.action_space_size], initializer=tf.zeros_initializer())
 
         self.trainable_params = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
@@ -63,17 +63,24 @@ class Agent:
         predictions_per_action = tf.reduce_sum(relevant_softmax, axis=1)
 
         # negative log
-        negative_log_per_action = -1.0 * tf.log(predictions_per_action)
+        # negative_log_per_action = 1.0 - predictions_per_action
+        # # negative log
+        negative_log_per_action = -1.0 * tf.log(
+            (tf.ones_like(predictions_per_action) * 0.001) + predictions_per_action
+        )
         # negative_log_per_action = tf.log(predictions_per_action)
 
-        # init optimizer
-        adam = tf.train.AdamOptimizer(learning_rate=tf_learn_rate)
-        # adam = tf.train.GradientDescentOptimizer(learning_rate=tf_learn_rate)
-        # adam = tf.train.RMSPropOptimizer(learning_rate=tf_learn_rate)
-        # compute and apply the batch gradients
-        grads_and_vars = adam.compute_gradients(loss=negative_log_per_action, var_list=self.trainable_params,
-                                                grad_loss=self.rewards_per_action)
-        self.train_step = adam.apply_gradients(grads_and_vars=grads_and_vars, global_step=self.global_step)
+        loss_with_rewards = negative_log_per_action * self.rewards_per_action
+        self.train_step = tf.train.AdamOptimizer(learning_rate=tf_learn_rate).minimize(loss_with_rewards)
+
+        # # init optimizer
+        # adam = tf.train.AdamOptimizer(learning_rate=tf_learn_rate)
+        # # adam = tf.train.GradientDescentOptimizer(learning_rate=tf_learn_rate)
+        # # adam = tf.train.RMSPropOptimizer(learning_rate=tf_learn_rate)
+        # # compute and apply the batch gradients
+        # grads_and_vars = adam.compute_gradients(loss=negative_log_per_action, var_list=self.trainable_params,
+        #                                         grad_loss=self.rewards_per_action)
+        # self.train_step = adam.apply_gradients(grads_and_vars=grads_and_vars, global_step=self.global_step)
 
         # # negative log
         # negative_log_per_action = -1.0 * tf.log(predictions_per_action)
@@ -100,9 +107,11 @@ def run_episode(sess, env, agent, render=False):
         action_probs = sess.run(agent.single_prediction,
                                 feed_dict={agent.observations: np.reshape(obsrv, (-1, obsrv.shape[0]))})
         action_probs = action_probs.astype(np.float64)
+        # action_probs = np.maximum(action_probs, np.ones_like(action_probs) * 0.001)
         action_probs /= action_probs.sum()  # normalize
         # get most likely
-        action = np.argmax(action_probs)
+        action = np.argmax(np.random.multinomial(1, action_probs.reshape(-1)))
+        # action = np.argmax(action_probs)
         # step the environment and get new measurements
         obsrv, reward, done, _ = env.step(action)
         # update states
@@ -229,7 +238,7 @@ def main(argv):
     hidden1 = 15
     hidden2 = 15
 
-    starting_learning_rate = 0.01
+    starting_learning_rate = 0.001
     learning_rate_decay_steps = 100
     learning_rate_weight_decrease = 1.0
 
@@ -239,7 +248,7 @@ def main(argv):
     total_episodes = 30000
     # total_episodes = 5
 
-    rewards_discount_factor = 1.00
+    rewards_discount_factor = 0.99
 
     run_for_parameter_set(hidden1, hidden2,
                           starting_learning_rate, learning_rate_decay_steps, learning_rate_weight_decrease,
