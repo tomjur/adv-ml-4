@@ -1,5 +1,5 @@
 import numpy as np
-from lunar_lander import run_for_parameter_set
+from lunar_lander_old import run_for_parameter_set
 
 import sys
 
