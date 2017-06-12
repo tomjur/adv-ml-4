@@ -62,7 +62,7 @@ class Agent:
         self.w2_input_placeholder = tf.placeholder(dtype=tf.float32, shape=[hidden1, hidden2])
         self.b2_input_placeholder = tf.placeholder(dtype=tf.float32, shape=[hidden2])
         self.w3_input_placeholder = tf.placeholder(dtype=tf.float32, shape=[hidden2, self.action_space_size])
-        self.b2_input_placeholder = tf.placeholder(dtype=tf.float32, shape=[self.action_space_size])
+        self.b3_input_placeholder = tf.placeholder(dtype=tf.float32, shape=[self.action_space_size])
 
         # call the following steps with the above placeholders to initiate with custom weights.
         self.load_w1 = tf.assign(self.w1, self.w1_input_placeholder)
