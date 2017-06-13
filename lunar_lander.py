@@ -6,6 +6,7 @@ import numpy as np
 import cPickle as pickle
 import timeit
 from agent import *
+import os
 
 
 def run_episode(sess, env, agent, movie_mode=False):
@@ -65,7 +66,7 @@ def do_movie(sess, env, agent):
 def run_for_parameter_set(hidden1, hidden2,
                           starting_learning_rate, learning_rate_decay_steps, learning_rate_weight_decrease,
                           total_episodes, episodes_per_update, rewards_discount_factor,
-                          print_summary_identification=None):
+                          print_summary_identification=None, keep_intermediate_models=False):
     env_d = 'LunarLander-v2'
     env = gym.make(env_d)
     env.reset()
@@ -117,34 +118,64 @@ def run_for_parameter_set(hidden1, hidden2,
             print 'iteration done, global_step {}, time {}, from start {}, avg rewards {}'\
                 .format(step, elapsed, elapsed_from_start, avg_rewards)
 
+            # create temp files for good models
+            if keep_intermediate_models and avg_rewards >= 200.0:
+                intermediate_index = find_first_temp_output_index()
+                params_filename = get_temp_name(intermediate_index)
+                print 'saved intermediate model in {}'.format(params_filename)
+                save_params_file(params_filename, sess, agent)
+
+
         # save parameters:
-        params_to_save = sess.run(agent.trainable_params)
-        params_filename = 'ws.p' if print_summary_identification is None \
-            else 'ws_{}.p'.format(print_summary_identification)
-        with open(params_filename, 'wb') as fp:
-            pickle.dump(params_to_save, fp)
+        params_filename = 'ws.p' if print_summary_identification is None else 'ws_{}.p'.format(print_summary_identification)
+        save_params_file(params_filename, sess, agent)
 
-        # do final movie - if not summary
-        if print_summary_identification is None:
-            do_movie(sess, env, agent)
-        else:
-            # use the parameter as a prefix for the file
-            filename = '{}.txt'.format(print_summary_identification)
+        if print_summary_identification is not None:
             avg_rewards = np.sum([run_episode(sess, env, agent) for _ in range(10)]) / 10.0
-            with open(filename, 'w') as summary_file:
-                def write_to_file(name, value):
-                    summary_file.write('{} : {}\n'.format(name, value))
+            print_hyperparameters_file(print_summary_identification, avg_rewards, hidden1, hidden2,
+                                       starting_learning_rate, learning_rate_decay_steps, learning_rate_weight_decrease,
+                                       total_episodes, episodes_per_update, rewards_discount_factor)
 
-                write_to_file('avg_rewards', avg_rewards)
-                summary_file.write('\n')
-                write_to_file('hidden1', hidden1)
-                write_to_file('hidden2', hidden2)
-                write_to_file('starting_learning_rate', starting_learning_rate)
-                write_to_file('learning_rate_decay_steps', learning_rate_decay_steps)
-                write_to_file('learning_rate_weight_decrease', learning_rate_weight_decrease)
-                write_to_file('total_episodes', total_episodes)
-                write_to_file('episodes_per_update', episodes_per_update)
-                write_to_file('rewards_discount_factor', rewards_discount_factor)
+
+def save_params_file(params_filename, sess, agent):
+    params_to_save = sess.run(agent.trainable_params)
+    with open(params_filename, 'wb') as fp:
+        pickle.dump(params_to_save, fp)
+
+
+def print_hyperparameters_file(summary_identification, avg_rewards, hidden1, hidden2, starting_learning_rate,
+                               learning_rate_decay_steps, learning_rate_weight_decrease, total_episodes,
+                               episodes_per_update, rewards_discount_factor):
+    # prints a text file that describes the hyperparameters used
+
+    # use the parameter as a prefix for the file
+    filename = '{}.txt'.format(summary_identification)
+
+    with open(filename, 'w') as summary_file:
+        def write_to_file(name, value):
+            summary_file.write('{} : {}\n'.format(name, value))
+
+        write_to_file('avg_rewards', avg_rewards)
+        summary_file.write('\n')
+        write_to_file('hidden1', hidden1)
+        write_to_file('hidden2', hidden2)
+        write_to_file('starting_learning_rate', starting_learning_rate)
+        write_to_file('learning_rate_decay_steps', learning_rate_decay_steps)
+        write_to_file('learning_rate_weight_decrease', learning_rate_weight_decrease)
+        write_to_file('total_episodes', total_episodes)
+        write_to_file('episodes_per_update', episodes_per_update)
+        write_to_file('rewards_discount_factor', rewards_discount_factor)
+
+
+def get_temp_name(index):
+    return 'ws_{}.p'.format(index)
+
+
+def find_first_temp_output_index():
+    current = 0
+    while os.path.isfile(get_temp_name(current)):
+        current += 1
+    return current
 
 
 def main(argv):
@@ -168,7 +199,7 @@ def main(argv):
 
     run_for_parameter_set(hidden1, hidden2,
                           starting_learning_rate, learning_rate_decay_steps, learning_rate_weight_decrease,
-                          total_episodes, episodes_per_update, rewards_discount_factor)
+                          total_episodes, episodes_per_update, rewards_discount_factor, keep_intermediate_models=False)
 
 if __name__ == '__main__':
     tf.app.run()
